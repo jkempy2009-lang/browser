@@ -13,10 +13,20 @@ Put the scoreboard controls inside `<div id="scoreboard-slot">` in `index.html`.
 - `window.currentUrl`: the loaded link, or `""` when nothing is loaded
 - a `pagechange` event on `document`, with the link in `event.detail.url`
 
+## How sites are loaded
+
+- **On Cloudflare** the site runs with a relay (`src/worker.js`). The relay fetches the website itself and removes its "do not embed me" instructions, so most simple sites show inside the page. Address format: `https://<this-site>/https://example.com/page`.
+- **On plain static hosting** (Vercel, GitHub Pages) there is no relay. Sites are loaded directly, and ones that forbid embedding show blank.
+
+The page detects which mode it is in by asking for `/__relay`.
+
 ## Limits
 
-The site is shown in an iframe. Websites that forbid being embedded will show blank or "refused to connect"; the "Open in new tab" button is the fallback. Only `https` links can be shown when this page is itself served over `https`.
+- Sites that need a sign-in will not work through the relay: cookies are removed on purpose.
+- Heavily scripted sites (video, maps, web apps) often break. The "Open in new tab" button is the fallback.
+- The relay only fetches public websites, and relayed pages can only be displayed inside this site.
 
 ## Hosting
 
-No build step. Any static host works (Vercel, GitHub Pages, Netlify): serve the repo root.
+- **Cloudflare Workers**: connect the repo; it deploys with `npx wrangler deploy` using `wrangler.jsonc`. The `name` in that file must match the Worker's name in the Cloudflare dashboard.
+- **Static hosts**: serve the `public/` folder. No build step.

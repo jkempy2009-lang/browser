@@ -1,0 +1,8 @@
+{
+  // Cloudflare Workers settings. "name" must match the Worker's name in the Cloudflare dashboard.
+  "name": "browser",
+  "main": "src/worker.js",
+  "compatibility_date": "2025-10-01",
+  // The viewer page itself (public/index.html) is served as a static file.
+  "assets": { "directory": "./public" }
+}
