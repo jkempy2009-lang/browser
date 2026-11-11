@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Futsal Score Sheet</title>
+<style>
+  :root {
+    --bar-bg: #14213d;
+    --bar-fg: #ffffff;
+    --accent: #fca311;
+    --page-bg: #f2f3f5;
+    --text: #1c1c1c;
+    --muted: #5c6370;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    display: flex;
+    flex-direction: column;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--page-bg);
+    color: var(--text);
+  }
+
+  /* ---------- Top bar ---------- */
+  #bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--bar-bg);
+    color: var(--bar-fg);
+  }
+  #url-form { display: flex; flex: 1 1 320px; gap: 8px; min-width: 0; }
+  #url-input {
+    flex: 1;
+    min-width: 0;
+    padding: 8px 10px;
+    font-size: 16px; /* 16px stops iOS zooming on focus */
+    border: 0;
+    border-radius: 6px;
+  }
+  button, .bar-link {
+    padding: 8px 14px;
+    font-size: 14px;
+    font-weight: 600;
+    border: 0;
+    border-radius: 6px;
+    cursor: pointer;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  #go { background: var(--accent); color: #14213d; }
+  .secondary { background: rgba(255, 255, 255, 0.14); color: var(--bar-fg); }
+  .secondary:hover { background: rgba(255, 255, 255, 0.24); }
+  [hidden] { display: none !important; }
+
+  /* Scoreboard controls go in here (see comment in the HTML). */
+  #scoreboard-slot { display: flex; align-items: center; gap: 8px; }
+
+  /* ---------- Page area ---------- */
+  #stage { position: relative; flex: 1; min-height: 0; }
+  #frame { width: 100%; height: 100%; border: 0; display: block; background: #fff; }
+  #empty, #blocked-help {
+    max-width: 560px;
+    margin: 0 auto;
+    padding: 48px 16px;
+    text-align: center;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+  #empty h1 { color: var(--text); font-size: 22px; margin: 0 0 8px; }
+  #notice {
+    padding: 6px 12px;
+    font-size: 13px;
+    background: #fff4d6;
+    color: #5c4400;
+    border-bottom: 1px solid #f0dca0;
+  }
+  #notice a { color: inherit; font-weight: 600; }
+  #error { padding: 6px 12px; font-size: 13px; background: #fde2e2; color: #7a1010; }
+</style>
+</head>
+<body>
+
+<header id="bar">
+  <form id="url-form" autocomplete="off">
+    <input id="url-input" type="text" inputmode="url" spellcheck="false"
+           placeholder="Paste the score sheet link here" aria-label="Website link">
+    <button id="go" type="submit">Go</button>
+  </form>
+  <button id="copy" class="secondary" type="button" hidden>Copy share link</button>
+  <a id="newtab" class="bar-link secondary" target="_blank" rel="noopener" hidden>Open in new tab</a>
+
+  <!--
+    SCOREBOARD SLOT
+    Put the scoreboard connection controls inside this div.
+    The page tells you what is loaded via:
+      - window.currentUrl                      (string, "" when nothing is loaded)
+      - document "pagechange" event            (event.detail.url)
+  -->
+  <div id="scoreboard-slot"></div>
+</header>
+
+<div id="error" role="alert" hidden></div>
+<div id="notice" hidden>
+  Blank or "refused to connect"? That website does not allow itself to be shown inside other sites.
+  <a id="notice-link" target="_blank" rel="noopener">Open it in a new tab instead</a>.
+</div>
+
+<main id="stage">
+  <div id="empty">
+    <h1>Paste a link to get started</h1>
+    <p>Paste the score sheet link in the bar above and press Go. The page opens right here,
+       and you can copy a share link that opens the same page for everyone else.</p>
+  </div>
+  <iframe id="frame" title="Loaded website" hidden
+          allow="clipboard-read; clipboard-write; fullscreen"
+          referrerpolicy="no-referrer"></iframe>
+</main>
+
+<script>
+(function () {
+  var form = document.getElementById('url-form');
+  var input = document.getElementById('url-input');
+  var frame = document.getElementById('frame');
+  var empty = document.getElementById('empty');
+  var errorBox = document.getElementById('error');
+  var notice = document.getElementById('notice');
+  var noticeLink = document.getElementById('notice-link');
+  var copyBtn = document.getElementById('copy');
+  var newTab = document.getElementById('newtab');
+
+  window.currentUrl = '';
+
+  // Turn whatever was pasted into a safe http(s) URL, or return null.
+  function normalise(raw) {
+    var text = (raw || '').trim();
+    if (!text) return null;
+    if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(text)) text = 'https://' + text;
+    var url;
+    try { url = new URL(text); } catch (e) { return null; }
+    // Only real web pages: blocks javascript:, data:, file: and similar.
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+    if (!url.hostname.includes('.') && url.hostname !== 'localhost') return null;
+    return url.href;
+  }
+
+  function shareLink(url) {
+    return location.origin + location.pathname + '?url=' + encodeURIComponent(url);
+  }
+
+  function show(url, updateAddress) {
+    window.currentUrl = url;
+    input.value = url;
+    errorBox.hidden = true;
+    empty.hidden = true;
+    frame.hidden = false;
+    frame.src = url;
+
+    newTab.href = url;
+    noticeLink.href = url;
+    newTab.hidden = false;
+    copyBtn.hidden = false;
+    notice.hidden = false;
+
+    if (updateAddress) history.pushState({ url: url }, '', shareLink(url));
+    document.dispatchEvent(new CustomEvent('pagechange', { detail: { url: url } }));
+  }
+
+  function clear() {
+    window.currentUrl = '';
+    input.value = '';
+    frame.hidden = true;
+    frame.removeAttribute('src');
+    empty.hidden = false;
+    newTab.hidden = true;
+    copyBtn.hidden = true;
+    notice.hidden = true;
+    document.dispatchEvent(new CustomEvent('pagechange', { detail: { url: '' } }));
+  }
+
+  function fail(message) {
+    errorBox.textContent = message;
+    errorBox.hidden = false;
+  }
+
+  form.addEventListener('submit', function (event) {
+    event.preventDefault();
+    var url = normalise(input.value);
+    if (!url) return fail('That does not look like a website link. Paste the full link, e.g. https://example.com/page');
+    if (location.protocol === 'https:' && url.indexOf('http:') === 0) {
+      return fail('That link starts with http://, which browsers will not show inside a secure page. Try it with https:// instead.');
+    }
+    show(url, true);
+  });
+
+  copyBtn.addEventListener('click', function () {
+    var link = shareLink(window.currentUrl);
+    var done = function () {
+      copyBtn.textContent = 'Copied!';
+      setTimeout(function () { copyBtn.textContent = 'Copy share link'; }, 1500);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(link).then(done, function () { prompt('Copy this link:', link); });
+    } else {
+      prompt('Copy this link:', link);
+    }
+  });
+
+  // Load from ?url=... on first visit and when using back/forward.
+  function loadFromAddress() {
+    var url = normalise(new URLSearchParams(location.search).get('url'));
+    if (url) show(url, false); else clear();
+  }
+  window.addEventListener('popstate', loadFromAddress);
+  loadFromAddress();
+})();
+</script>
+</body>
+</html>
